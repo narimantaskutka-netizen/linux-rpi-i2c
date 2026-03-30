@@ -1,4 +1,3 @@
-# linux-rpi-i2c
 # My I2C Kernel Module
 # i2c device: PCF8574T I/O
 
@@ -10,10 +9,16 @@ Custom Linux kernel module for Raspberry Pi (I2C).
 - Built-in kernel support
 
 ## Usage
-# i2c address 0x20
+# create i2c device address 0x20
+echo my_i2c_module 0x20 | sudo tee /sys/bus/i2c/devices/i2c-1/new_device
 
 echo 0x01 | sudo tee /sys/kernel/my_i2c_module/data
 cat /sys/kernel/my_i2c_module/data
+echo 0x00 | sudo tee /sys/kernel/my_i2c_module/data
+cat /sys/kernel/my_i2c_module/data
+
+# delete i2c device address 0x20
+echo 0x20 | sudo tee /sys/bus/i2c/devices/i2c-1/delete_device
 
 ## Build
 

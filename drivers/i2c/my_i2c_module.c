@@ -5,11 +5,10 @@
 #include <linux/sysfs.h>
 #include <linux/i2c.h>
 
-#define I2C_BUS 1
-#define I2C_ADDR 0x20   // addr
-
 static struct kobject *my_kobj;
 static struct i2c_client *client;
+
+/* ================= SYSFS ================= */
 
 static ssize_t data_show(struct kobject *kobj,
                          struct kobj_attribute *attr,
@@ -17,40 +16,27 @@ static ssize_t data_show(struct kobject *kobj,
 {
     int ret;
 
-    if (!client) {
-        pr_err("I2C client not initialized!\n");
+    if (!client)
         return -ENODEV;
-    }
 
     ret = i2c_smbus_read_byte(client);
-    if (ret < 0) {
-        pr_err("I2C read failed\n");
+    if (ret < 0)
         return ret;
-    }
 
     return sprintf(buf, "0x%02x\n", ret);
 }
 
-
-/* SYSFS WRITE */
 static ssize_t data_store(struct kobject *kobj,
                           struct kobj_attribute *attr,
                           const char *buf, size_t count)
 {
     unsigned long value;
-    int ret;
 
-    ret = kstrtoul(buf, 0, &value);
-    if (ret)
-        return ret;
+    if (kstrtoul(buf, 0, &value))
+        return -EINVAL;
 
-    printk("my_i2c_module: writing %lu to I2C\n", value);
-
-    if (client) {
+    if (client)
         i2c_smbus_write_byte(client, (u8)value);
-    } else {
-        printk("I2C client not initialized!\n");
-    }
 
     return count;
 }
@@ -58,61 +44,63 @@ static ssize_t data_store(struct kobject *kobj,
 static struct kobj_attribute data_attribute =
     __ATTR(data, 0664, data_show, data_store);
 
-/* INIT */
-static int __init my_init(void)
+/* ================= I2C DRIVER ================= */
+
+static int my_probe(struct i2c_client *cl)
 {
-    struct i2c_adapter *adapter;
+    int ret;
 
-    printk("my_i2c_module loaded\n");
+    pr_info("my_i2c_module: device found at 0x%02x\n", cl->addr);
 
-    /* sysfs */
+    client = cl;
+
+    /* sysfs create */
     my_kobj = kobject_create_and_add("my_i2c_module", kernel_kobj);
     if (!my_kobj)
         return -ENOMEM;
 
-    int ret;
-
     ret = sysfs_create_file(my_kobj, &data_attribute.attr);
     if (ret) {
-        printk("Failed to create sysfs file\n");
+        kobject_put(my_kobj);
         return ret;
     }
-
-    /* I2C setup */
-    adapter = i2c_get_adapter(I2C_BUS);
-    if (!adapter) {
-        printk("Failed to get I2C adapter\n");
-        return -ENODEV;
-    }
-
-    client = i2c_new_dummy_device(adapter, I2C_ADDR);
-    i2c_put_adapter(adapter);
-
-    if (IS_ERR(client)) {
-        printk("Failed to create I2C client\n");
-        return PTR_ERR(client);
-    }
-
-    printk("I2C client created at address 0x%x\n", I2C_ADDR);
 
     return 0;
 }
 
-/* EXIT */
-static void __exit my_exit(void)
+static void my_remove(struct i2c_client *cl)
 {
-    printk("my_i2c_module unloaded\n");
-
-    if (client)
-        i2c_unregister_device(client);
+    pr_info("my_i2c_module removed\n");
 
     if (my_kobj)
         kobject_put(my_kobj);
+
+    client = NULL;
 }
 
-module_init(my_init);
-module_exit(my_exit);
+/* ================= ID TABLE ================= */
+
+static const struct i2c_device_id my_id[] = {
+    { "my_i2c_module", 0 },
+    { }
+};
+MODULE_DEVICE_TABLE(i2c, my_id);
+
+/* ================= DRIVER ================= */
+
+static struct i2c_driver my_driver = {
+    .driver = {
+        .name = "my_i2c_module",
+    },
+    .probe = my_probe,
+    .remove = my_remove,
+    .id_table = my_id,
+};
+
+module_i2c_driver(my_driver);
+
+/* ================= INFO ================= */
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("NK");
-MODULE_DESCRIPTION("Sysfs + I2C test1");
+MODULE_DESCRIPTION("Sysfs + I2C driver v3");
